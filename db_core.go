@@ -314,6 +314,7 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 	ItemDir := path.Join(d.Base, "dbs", DatabaseName, TableName, "r", Item)
 	if _, err := os.Stat(ItemDir); os.IsNotExist(err) {
 		err := errors.New("The item specified does not exist.")
+		lock.Unlock()
 		return nil, &err
 	}
 	data, err := ioutil.ReadFile(ItemDir)
@@ -346,7 +347,29 @@ func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item 
 		return &err
 	}
 
-	// TODO: Finish inserts.
+	// Locks the table.
+	lock := d.GetTableLock(DatabaseName, TableName)
+	lock.Lock()
+
+	// Inserts the item into the filesystem.
+	ItemDir := path.Join(d.Base, "dbs", DatabaseName, TableName, "r", Key)
+	f, err := os.Create(ItemDir)
+	if err != nil {
+		panic(err)
+	}
+	b, err := json.Marshal(Item)
+	if err != nil {
+		panic(err)
+	}
+	_, err = f.Write(b)
+	if err != nil {
+		panic(err)
+	}
+
+	// TODO: Index insertion here.
+
+	// Unlocks the table.
+	lock.Unlock()
 
 	// Everything worked! Return a null for error.
 	return nil
