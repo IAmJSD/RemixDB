@@ -13,14 +13,14 @@ import (
 var Cache *InMemoryCache
 
 type InMemoryCache struct {
-	Lock *sync.Mutex
+	Lock *sync.RWMutex
 	TotalBytes int64
 	UsedBytes int64
 	Map map[string]*[]byte
 }
 
 func NewMemoryCache() {
-	mutex := sync.Mutex{}
+	mutex := sync.RWMutex{}
 	Cache = &InMemoryCache{
 		Lock:       &mutex,
 		TotalBytes: 100000000,
@@ -53,13 +53,13 @@ func (c *InMemoryCache) Delete(key string) {
 
 func (c *InMemoryCache) Get(key string) *[]byte {
 	// Locks the thread lock.
-	c.Lock.Lock()
+	c.Lock.RLock()
 
 	// Gets the item.
 	i := c.Map[key]
 
 	// Unlocks the thread lock.
-	c.Lock.Unlock()
+	c.Lock.RUnlock()
 
 	// Returns the item.
 	return i
