@@ -86,6 +86,13 @@ func NewDBCore() {
 			panic(err)
 		}
 	}
+	for _, db := range dbs {
+		for _, table := range db.Tables {
+			for _, index := range table.Indexes {
+				index.Init(join, db.Name, table.Name)
+			}
+		}
+	}
 }
 
 // Get a copy of the DB structure if it exists.
@@ -368,7 +375,6 @@ func (i *Index) Init(Base string, DatabaseName string, TableName string) {
 
 // Insets into a index.
 func (i *Index) Insert(Base string, DatabaseName string, TableName string, Key string, Item string) {
-	i.Init(Base, DatabaseName, TableName)
 	IndexFile := "0"
 	var IndexFilePath string
 	var MapSave *map[string]*[]string
@@ -492,9 +498,6 @@ func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item 
 
 // Deletes an item from this index.
 func (i *Index) DeleteItem(Base string, DatabaseName string, TableName string, Item string) {
-	// Initialises the index.
-	i.Init(Base, DatabaseName, TableName)
-
 	// Locks the index lock.
 	i.IndexLock.Lock()
 
