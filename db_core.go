@@ -610,7 +610,39 @@ func (d *DBCore) DeleteTable(DatabaseName string, TableName string) *error {
 	return &err
 }
 
+// Deletes a database.
+func (d *DBCore) DeleteDatabase(DatabaseName string) *error {
+	// Locks the array.
+	d.ArrayLock.Lock()
+
+	for index, db := range *d.Structure {
+		if DatabaseName == db.Name {
+			NewDBArray := make([]*DBStructure, len(*d.Structure) - 1)
+			x := 0
+			for i, v := range *d.Structure {
+				if i == index {
+					continue
+				}
+				NewDBArray[x] = v
+				x++
+			}
+			d.Structure = &NewDBArray
+			d.ArrayLock.Unlock()
+			d.SaveStructure()
+			err := os.RemoveAll(path.Join(d.Base, "dbs", DatabaseName))
+			if err != nil {
+				panic(err)
+			}
+			return nil
+		}
+	}
+
+	// Returns an error.
+	d.ArrayLock.Unlock()
+	err := errors.New(`The database "` + DatabaseName + `" does not exist.`)
+	return &err
+}
+
 // TODO: GetAllByIndex
 // TODO: GetAll
-// TODO: DeleteDatabase
 // TODO: TableKeys
