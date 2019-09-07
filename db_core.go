@@ -22,6 +22,9 @@ type DBStructure struct {
 type Index struct {
 	Name string `json:"n"`
 	Keys []string `json:"k"`
+	IndexLock *sync.Mutex `json:"-"`
+	MapPreload *map[string]*[]string `json:"-"`
+	CurrentIndexDoc int `json:"-"`
 }
 
 type Table struct {
@@ -332,10 +335,96 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 	return &item, nil
 }
 
+// Initialises the index.
+func (i *Index) Init(Base string, DatabaseName string, TableName string) {
+	if i.IndexLock == nil {
+		i.IndexLock = &sync.Mutex{}
+	}
+	if i.MapPreload == nil {
+		i.IndexLock.Lock()
+		i.MapPreload = &map[string]*[]string{}
+		IndexDir := path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name)
+		if _, err := os.Stat(IndexDir); os.IsNotExist(err) {
+			err = os.Mkdir(IndexDir, 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+		f, _ := ioutil.ReadDir(IndexDir)
+		i.CurrentIndexDoc = len(f)
+		if i.CurrentIndexDoc != 0 {
+			data, err := ioutil.ReadFile(path.Join(IndexDir, "0"))
+			if err != nil {
+				panic(err)
+			}
+			err = json.Unmarshal(data, i.MapPreload)
+			if err != nil {
+				panic(err)
+			}
+		}
+		i.IndexLock.Unlock()
+	}
+}
+
+// Insets into a index.
+func (i *Index) Insert(Base string, DatabaseName string, TableName string, Key string, Item string) {
+	i.Init(Base, DatabaseName, TableName)
+	IndexFile := "0"
+	var IndexFilePath string
+	var MapSave *map[string]*[]string
+	i.IndexLock.Lock()
+
+	if len(*i.MapPreload) == 10000 {
+		// Load the last part of the index from disk. If it's also the length of 10,000, make a new index file.
+		var DiskLoad map[string]*[]string
+		IndexFile = string(i.CurrentIndexDoc - 1)
+		IndexFilePath = path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, IndexFile)
+		f, err := ioutil.ReadFile(IndexFilePath)
+		if err != nil {
+			panic(err)
+		}
+		err = json.Unmarshal(f, &DiskLoad)
+		if err != nil {
+			panic(err)
+		}
+		if len(DiskLoad) == 10000 {
+			MapSave = &map[string]*[]string{}
+			IndexFile = string(i.CurrentIndexDoc)
+		} else {
+			MapSave = &DiskLoad
+		}
+	} else {
+		// This is in memory! Grab the preload.
+		MapSave = i.MapPreload
+		IndexFilePath = path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, IndexFile)
+	}
+
+	if (*MapSave)[Key] == nil {
+		(*MapSave)[Key] = &[]string{}
+	}
+	Appended := append(*(*MapSave)[Key], Item)
+	(*MapSave)[Key] = &Appended
+
+	b, err := json.Marshal(MapSave)
+	if err != nil {
+		panic(err)
+	}
+	f, err := os.Create(IndexFilePath)
+	if err != nil {
+		panic(err)
+	}
+	_, err = f.Write(b)
+	if err != nil {
+		panic(err)
+	}
+	i.IndexLock.Unlock()
+}
+
 // Inserts a item into the database.
 func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item *interface{}) *error {
 	// Checks the table exists.
-	if d.Table(DatabaseName, TableName) == nil {
+	Table := d.Table(DatabaseName, TableName)
+	if Table == nil {
 		err := errors.New(`The table "` + TableName + `" does not exist.`)
 		return &err
 	}
@@ -366,10 +455,34 @@ func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item 
 		panic(err)
 	}
 
-	// TODO: Index insertion here.
-
 	// Unlocks the table.
 	lock.Unlock()
+
+	// Inserts into any relevant indexes if needed.
+	cast, ok := (*Item).(map[string]interface{})
+	if ok {
+		for _, v := range Table.Indexes {
+			IndexBy := make([]interface{}, 0)
+			IndexFits := true
+			for _, k := range v.Keys {
+				if cast[k] == nil {
+					IndexFits = false
+				} else {
+					IndexBy = append(IndexBy, cast[k])
+				}
+			}
+
+			// Why? Fuck knows. Go dislikes having interface{} [] as a type for a map key apparently.
+			j, err := json.Marshal(IndexBy)
+			if err != nil {
+				panic(err)
+			}
+
+			if IndexFits {
+				v.Insert(d.Base, DatabaseName, TableName, string(j), Key)
+			}
+		}
+	}
 
 	// Everything worked! Return a null for error.
 	return nil
