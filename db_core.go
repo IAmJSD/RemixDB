@@ -296,12 +296,6 @@ func (d *DBCore) GetTableLock(DatabaseName string, TableName string) *sync.Mutex
 
 // Gets a item from a table.
 func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*interface{}, *error) {
-	// Checks the table exists.
-	if d.Table(DatabaseName, TableName) == nil {
-		err := errors.New(`The table "` + TableName + `" does not exist.`)
-		return nil, &err
-	}
-
 	// Defines what it will be marshalled into.
 	var item interface{}
 
@@ -316,6 +310,12 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 			panic(err)
 		}
 		return &item, nil
+	}
+
+	// Checks the table exists.
+	if d.Table(DatabaseName, TableName) == nil {
+		err := errors.New(`The table "` + TableName + `" does not exist.`)
+		return nil, &err
 	}
 
 	// Try and get the item from the filesystem.
