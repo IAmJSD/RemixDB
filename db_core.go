@@ -701,3 +701,60 @@ func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName st
 	// Yay, no errors!
 	return nil
 }
+
+// Creates a index.
+func (d *DBCore) CreateIndex(DatabaseName string, TableName string, IndexName string, Keys []string) *error {
+	// Gets the table lock.
+	lock := d.GetTableLock(DatabaseName, TableName)
+	lock.Lock()
+
+	// Lock the database slice.
+	d.ArrayLock.Lock()
+
+	// Go through all the databases.
+	for _, db := range *d.Structure {
+		if db.Name == DatabaseName {
+			for _, table := range db.Tables {
+				if table.Name == TableName {
+					for _, index := range table.Indexes {
+						if index.Name == IndexName {
+							err := errors.New(`The index "` + IndexName + `" already exists.`)
+							d.ArrayLock.Unlock()
+							lock.Unlock()
+							return &err
+						}
+					}
+
+					i := Index{
+						Name:            IndexName,
+						Keys:            Keys,
+						IndexLock:       nil,
+						MapPreload:      nil,
+						CurrentIndexDoc: 0,
+					}
+					table.Indexes = append(table.Indexes, &i)
+					i.Init(d.Base, DatabaseName, TableName)
+
+					d.ArrayLock.Unlock()
+					lock.Unlock()
+					d.SaveStructure()
+					return nil
+				}
+			}
+			d.ArrayLock.Unlock()
+			lock.Unlock()
+			err := errors.New(`The table "` + TableName + `" does not exist.`)
+			return &err
+		}
+	}
+
+	// Unlock the database slice.
+	d.ArrayLock.Unlock()
+
+	// Unlocks the table lock.
+	lock.Unlock()
+
+	// Throw an error.
+	err := errors.New(`The database "` + DatabaseName + `" does not exist.`)
+	return &err
+}
