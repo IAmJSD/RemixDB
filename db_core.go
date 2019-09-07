@@ -450,14 +450,6 @@ func (d *DBCore) DeleteRecord(DatabaseName string, TableName string, Item string
 	return nil
 }
 
-// Does the index filesystem garbage collection.
-func IndexFilesystemGC(Base string, DatabaseName string, TableName string, IndexName string) {
-	err := os.RemoveAll(path.Join(Base, "dbs", DatabaseName, TableName, "i", IndexName))
-	if err != nil {
-		panic(err)
-	}
-}
-
 // Deletes a index.
 func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName string) *error {
 	// Gets the table lock.
@@ -512,7 +504,10 @@ func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName st
 	lock.Unlock()
 
 	// Do some filesystem garbage collection (this can be in the background).
-	IndexFilesystemGC(d.Base, DatabaseName, TableName, IndexName)
+	err := os.RemoveAll(path.Join(d.Base, "dbs", DatabaseName, TableName, "i", IndexName))
+	if err != nil {
+		panic(err)
+	}
 
 	// Yay, no errors!
 	return nil
@@ -577,11 +572,45 @@ func (d *DBCore) CreateIndex(DatabaseName string, TableName string, IndexName st
 
 // Deletes a table.
 func (d *DBCore) DeleteTable(DatabaseName string, TableName string) *error {
-	return nil
+	// Locks the array.
+	d.ArrayLock.Lock()
+
+	for _, db := range *d.Structure {
+		if DatabaseName == db.Name {
+			for index, table := range db.Tables {
+				if table.Name == TableName {
+					NewTableArray := make([]*Table, len(db.Tables) - 1)
+					x := 0
+					for i, v := range db.Tables {
+						if i == index {
+							continue
+						}
+						NewTableArray[x] = v
+						x++
+					}
+					db.Tables = NewTableArray
+					d.ArrayLock.Unlock()
+					d.SaveStructure()
+					err := os.RemoveAll(path.Join(d.Base, "dbs", DatabaseName, TableName))
+					if err != nil {
+						panic(err)
+					}
+					return nil
+				}
+			}
+			d.ArrayLock.Unlock()
+			err := errors.New(`The table "` + TableName + `" does not exist.`)
+			return &err
+		}
+	}
+
+	// Returns an error.
+	d.ArrayLock.Unlock()
+	err := errors.New(`The database "` + DatabaseName + `" does not exist.`)
+	return &err
 }
 
 // TODO: GetAllByIndex
 // TODO: GetAll
-// TODO: DeleteTable
 // TODO: DeleteDatabase
 // TODO: TableKeys
