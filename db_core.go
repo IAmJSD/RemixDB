@@ -166,11 +166,11 @@ func (d *DBCore) Table(DatabaseName string, TableName string) *Table {
 }
 
 // Creates a database.
-func (d *DBCore) CreateDatabase(DatabaseName string) *error {
+func (d *DBCore) CreateDatabase(DatabaseName string) error {
 	// Check if the database already exists.
 	if d.Database(DatabaseName) != nil {
 		err := errors.New(`The database "` + DatabaseName + `" already exists.`)
-		return &err
+		return err
 	}
 
 	// Locks the array lock.
@@ -207,12 +207,12 @@ func (d *DBCore) CreateDatabase(DatabaseName string) *error {
 }
 
 // Creates a table.
-func (d *DBCore) CreateTable(DatabaseName string, TableName string) *error {
+func (d *DBCore) CreateTable(DatabaseName string, TableName string) error {
 	// Get the database relating to this table.
 	db := d.Database(DatabaseName)
 	if db == nil {
 		err := errors.New(`The database "` + DatabaseName + `" does not exist.`)
-		return &err
+		return err
 	}
 
 	// Locks the array lock.
@@ -223,7 +223,7 @@ func (d *DBCore) CreateTable(DatabaseName string, TableName string) *error {
 		if v.Name == TableName {
 			err := errors.New(`The table "` + TableName + `" already exists.`)
 			d.ArrayLock.Unlock()
-			return &err
+			return err
 		}
 	}
 
@@ -287,7 +287,7 @@ func (d *DBCore) GetTableLock(DatabaseName string, TableName string) *sync.Mutex
 }
 
 // Gets a item from a table.
-func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*interface{}, *error) {
+func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*interface{}, error) {
 	// Defines what it will be marshalled into.
 	var item interface{}
 
@@ -307,7 +307,7 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 	// Checks the table exists.
 	if d.Table(DatabaseName, TableName) == nil {
 		err := errors.New(`The table "` + TableName + `" does not exist.`)
-		return nil, &err
+		return nil, err
 	}
 
 	// Try and get the item from the filesystem.
@@ -317,7 +317,7 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 	if _, err := os.Stat(ItemDir); os.IsNotExist(err) {
 		err := errors.New("The item specified does not exist.")
 		lock.Unlock()
-		return nil, &err
+		return nil, err
 	}
 	data, err := ioutil.ReadFile(ItemDir)
 	if err != nil {
@@ -335,19 +335,19 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 }
 
 // Inserts a item into the database.
-func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item *interface{}) *error {
+func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item *interface{}) error {
 	// Checks the table exists.
 	Table := d.Table(DatabaseName, TableName)
 	if Table == nil {
 		err := errors.New(`The table "` + TableName + `" does not exist.`)
-		return &err
+		return err
 	}
 
 	// Check if a record exists already.
 	r, _ := d.Get(DatabaseName, TableName, Key)
 	if r != nil {
 		err := errors.New(`The record "` + Key + `" already exists.`)
-		return &err
+		return err
 	}
 
 	// Locks the table.
@@ -404,7 +404,7 @@ func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item 
 }
 
 // Deletes a record from a table.
-func (d *DBCore) DeleteRecord(DatabaseName string, TableName string, Item string) *error {
+func (d *DBCore) DeleteRecord(DatabaseName string, TableName string, Item string) error {
 	// Check if the item actually exists.
 	record, err := d.Get(DatabaseName, TableName, Item)
 	if err != nil {
@@ -451,7 +451,7 @@ func (d *DBCore) DeleteRecord(DatabaseName string, TableName string, Item string
 }
 
 // Deletes a index.
-func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName string) *error {
+func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName string) error {
 	// Gets the table lock.
 	lock := d.GetTableLock(DatabaseName, TableName)
 	lock.Lock()
@@ -461,7 +461,7 @@ func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName st
 	if table == nil {
 		err := errors.New(`The table "` + TableName + `" does not exist.`)
 		lock.Unlock()
-		return &err
+		return err
 	}
 
 	// Deletes the index if it exists.
@@ -497,7 +497,7 @@ func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName st
 	if !exists {
 		err := errors.New(`The index "` + TableName + `" does not exist.`)
 		lock.Unlock()
-		return &err
+		return err
 	}
 
 	// Unlocks the table lock.
@@ -514,7 +514,7 @@ func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName st
 }
 
 // Creates a index.
-func (d *DBCore) CreateIndex(DatabaseName string, TableName string, IndexName string, Keys []string) *error {
+func (d *DBCore) CreateIndex(DatabaseName string, TableName string, IndexName string, Keys []string) error {
 	// Gets the table lock.
 	lock := d.GetTableLock(DatabaseName, TableName)
 	lock.Lock()
@@ -532,7 +532,7 @@ func (d *DBCore) CreateIndex(DatabaseName string, TableName string, IndexName st
 							err := errors.New(`The index "` + IndexName + `" already exists.`)
 							d.ArrayLock.Unlock()
 							lock.Unlock()
-							return &err
+							return err
 						}
 					}
 
@@ -555,7 +555,7 @@ func (d *DBCore) CreateIndex(DatabaseName string, TableName string, IndexName st
 			d.ArrayLock.Unlock()
 			lock.Unlock()
 			err := errors.New(`The table "` + TableName + `" does not exist.`)
-			return &err
+			return err
 		}
 	}
 
@@ -567,11 +567,11 @@ func (d *DBCore) CreateIndex(DatabaseName string, TableName string, IndexName st
 
 	// Throw an error.
 	err := errors.New(`The database "` + DatabaseName + `" does not exist.`)
-	return &err
+	return err
 }
 
 // Deletes a table.
-func (d *DBCore) DeleteTable(DatabaseName string, TableName string) *error {
+func (d *DBCore) DeleteTable(DatabaseName string, TableName string) error {
 	// Locks the array.
 	d.ArrayLock.Lock()
 
@@ -600,18 +600,18 @@ func (d *DBCore) DeleteTable(DatabaseName string, TableName string) *error {
 			}
 			d.ArrayLock.Unlock()
 			err := errors.New(`The table "` + TableName + `" does not exist.`)
-			return &err
+			return err
 		}
 	}
 
 	// Returns an error.
 	d.ArrayLock.Unlock()
 	err := errors.New(`The database "` + DatabaseName + `" does not exist.`)
-	return &err
+	return err
 }
 
 // Deletes a database.
-func (d *DBCore) DeleteDatabase(DatabaseName string) *error {
+func (d *DBCore) DeleteDatabase(DatabaseName string) error {
 	// Locks the array.
 	d.ArrayLock.Lock()
 
@@ -640,9 +640,25 @@ func (d *DBCore) DeleteDatabase(DatabaseName string) *error {
 	// Returns an error.
 	d.ArrayLock.Unlock()
 	err := errors.New(`The database "` + DatabaseName + `" does not exist.`)
-	return &err
+	return err
+}
+
+// Gets all table keys.
+func (d *DBCore) TableKeys(DatabaseName string, TableName string) ([]string, error) {
+	if d.Table(DatabaseName, TableName) == nil {
+		err := errors.New(`The table "` + TableName + `" does not exist.`)
+		return nil, err
+	}
+	files, err := ioutil.ReadDir(path.Join(d.Base, "dbs", DatabaseName, TableName, "r"))
+	if err != nil {
+		panic(err)
+	}
+	FileArr := make([]string, len(files))
+	for i, v := range files {
+		FileArr[i] = v.Name()
+	}
+	return FileArr, nil
 }
 
 // TODO: GetAllByIndex
 // TODO: GetAll
-// TODO: TableKeys
