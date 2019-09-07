@@ -374,8 +374,8 @@ func (i *Index) Insert(Base string, DatabaseName string, TableName string, Key s
 	var MapSave *map[string]*[]string
 	i.IndexLock.Lock()
 
-	if len(*i.MapPreload) == 10000 {
-		// Load the last part of the index from disk. If it's also the length of 10,000, make a new index file.
+	if len(*i.MapPreload) == 50000 {
+		// Load the last part of the index from disk. If it's also the length of 50,000, make a new index file.
 		var DiskLoad map[string]*[]string
 		IndexFile = string(i.CurrentIndexDoc - 1)
 		IndexFilePath = path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, IndexFile)
@@ -387,9 +387,10 @@ func (i *Index) Insert(Base string, DatabaseName string, TableName string, Key s
 		if err != nil {
 			panic(err)
 		}
-		if len(DiskLoad) == 10000 {
+		if len(DiskLoad) == 50000 {
 			MapSave = &map[string]*[]string{}
 			IndexFile = string(i.CurrentIndexDoc)
+			i.CurrentIndexDoc++
 		} else {
 			MapSave = &DiskLoad
 		}
@@ -467,6 +468,7 @@ func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item 
 			for _, k := range v.Keys {
 				if cast[k] == nil {
 					IndexFits = false
+					break
 				} else {
 					IndexBy = append(IndexBy, cast[k])
 				}
@@ -485,5 +487,146 @@ func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item 
 	}
 
 	// Everything worked! Return a null for error.
+	return nil
+}
+
+// Deletes an item from this index.
+func (i *Index) DeleteItem(Base string, DatabaseName string, TableName string, Item string) {
+	// Initialises the index.
+	i.Init(Base, DatabaseName, TableName)
+
+	// Locks the index lock.
+	i.IndexLock.Lock()
+
+	// We will check preload first.
+	for k, v := range *i.MapPreload {
+		for index, x := range *v {
+			if x == Item {
+				Data := make([]string, len(*v) - 1)
+				z := 0
+				for CurrentIndex, d := range *v {
+					if index == CurrentIndex {
+						continue
+					}
+					Data[z] = d
+					z++
+				}
+				(*i.MapPreload)[k] = &Data
+				IndexFilePath := path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, "0")
+				f, err := os.Create(IndexFilePath)
+				if err != nil {
+					panic(err)
+				}
+				b, err := json.Marshal(i.MapPreload)
+				if err != nil {
+					panic(err)
+				}
+				_, err = f.Write(b)
+				if err != nil {
+					panic(err)
+				}
+				i.IndexLock.Unlock()
+				return
+			}
+		}
+	}
+
+	// No luck with the preloaded data, lets open the other index files if they exist.
+	if i.CurrentIndexDoc > 1 {
+		x := 1
+		for i.CurrentIndexDoc != x {
+			IndexFilePath := path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, string(x))
+			var Loaded map[string]*[]string
+			d, err := ioutil.ReadFile(IndexFilePath)
+			if err != nil {
+				panic(err)
+			}
+			err = json.Unmarshal(d, &Loaded)
+			if err != nil {
+				panic(err)
+			}
+			for k, v := range Loaded {
+				for index, x := range *v {
+					if x == Item {
+						Data := make([]string, len(*v) - 1)
+						z := 0
+						for CurrentIndex, d := range *v {
+							if index == CurrentIndex {
+								continue
+							}
+							Data[z] = d
+							z++
+						}
+						Loaded[k] = &Data
+						IndexFilePath := path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, x)
+						f, err := os.Create(IndexFilePath)
+						if err != nil {
+							panic(err)
+						}
+						b, err := json.Marshal(&Loaded)
+						if err != nil {
+							panic(err)
+						}
+						_, err = f.Write(b)
+						if err != nil {
+							panic(err)
+						}
+						i.IndexLock.Unlock()
+						return
+					}
+				}
+			}
+			x++
+		}
+	}
+
+	// Unlocks the index lock.
+	i.IndexLock.Unlock()
+}
+
+// Deletes a record from a table.
+func (d *DBCore) DeleteRecord(DatabaseName string, TableName string, Item string) *error {
+	// Check if the item actually exists.
+	record, err := d.Get(DatabaseName, TableName, Item)
+	if err != nil {
+		return err
+	}
+
+	// Locks the table.
+	lock := d.GetTableLock(DatabaseName, TableName)
+	lock.Lock()
+
+	// Deletes the record.
+	e := os.Remove(path.Join(d.Base, "dbs", DatabaseName, TableName, "r", Item))
+	if e != nil {
+		panic(e)
+	}
+
+	// Unlocks the table.
+	lock.Unlock()
+
+	// Checks if any indexes are used and handles them if they are.
+	cast, ok := (*record).(map[string]interface{})
+	if ok {
+		Table := d.Table(DatabaseName, TableName)
+		for _, v := range Table.Indexes {
+			IndexFits := true
+			for _, k := range v.Keys {
+				if cast[k] == nil {
+					IndexFits = false
+					break
+				}
+			}
+
+			if IndexFits {
+				v.DeleteItem(d.Base, DatabaseName, TableName, Item)
+			}
+		}
+	}
+
+	// Wipe the item from the cache.
+	Cache.Delete(DatabaseName + ":" + TableName + ":" + Item)
+
+	// Yay! Return a null pointer for errors.
 	return nil
 }
