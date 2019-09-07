@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 )
 
@@ -628,5 +629,80 @@ func (d *DBCore) DeleteRecord(DatabaseName string, TableName string, Item string
 	Cache.Delete(DatabaseName + ":" + TableName + ":" + Item)
 
 	// Yay! Return a null pointer for errors.
+	return nil
+}
+
+// Does the index filesystem garbage collection.
+func IndexFilesystemGC(Base string, DatabaseName string, TableName string, IndexName string) {
+	files, err := filepath.Glob(filepath.Join(path.Join(Base, "dbs", DatabaseName, TableName, "i", IndexName), "*"))
+	if err != nil {
+		panic(err)
+	}
+	for _, file := range files {
+		println(file)
+		err = os.RemoveAll(file)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+// Deletes a index.
+func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName string) *error {
+	// Gets the table lock.
+	lock := d.GetTableLock(DatabaseName, TableName)
+	lock.Lock()
+
+	// Gets the table.
+	table := d.Table(DatabaseName, TableName)
+	if table == nil {
+		err := errors.New(`The table "` + TableName + `" does not exist.`)
+		lock.Unlock()
+		return &err
+	}
+
+	// Deletes the index if it exists.
+	exists := false
+	for index, v := range table.Indexes {
+		if v.Name == IndexName {
+			NewIndexArray := make([]*Index, len(table.Indexes) - 1)
+			x := 0
+			for i, v := range table.Indexes {
+				if i == index {
+					continue
+				}
+				NewIndexArray[x] = v
+				x++
+			}
+			table.Indexes = NewIndexArray
+			d.ArrayLock.Lock()
+			for _, obj := range *d.Structure {
+				if obj.Name == DatabaseName {
+					for i, o := range obj.Tables {
+						if o.Name == TableName {
+							obj.Tables[i] = table
+						}
+					}
+				}
+			}
+			d.ArrayLock.Unlock()
+			d.SaveStructure()
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		err := errors.New(`The index "` + TableName + `" does not exist.`)
+		lock.Unlock()
+		return &err
+	}
+
+	// Unlocks the table lock.
+	lock.Unlock()
+
+	// Do some filesystem garbage collection (this can be in the background).
+	IndexFilesystemGC(d.Base, DatabaseName, TableName, IndexName)
+
+	// Yay, no errors!
 	return nil
 }
