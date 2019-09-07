@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"path/filepath"
 	"sync"
 )
 
@@ -634,16 +633,9 @@ func (d *DBCore) DeleteRecord(DatabaseName string, TableName string, Item string
 
 // Does the index filesystem garbage collection.
 func IndexFilesystemGC(Base string, DatabaseName string, TableName string, IndexName string) {
-	files, err := filepath.Glob(filepath.Join(path.Join(Base, "dbs", DatabaseName, TableName, "i", IndexName), "*"))
+	err := os.RemoveAll(path.Join(Base, "dbs", DatabaseName, TableName, "i", IndexName))
 	if err != nil {
 		panic(err)
-	}
-	for _, file := range files {
-		println(file)
-		err = os.RemoveAll(file)
-		if err != nil {
-			panic(err)
-		}
 	}
 }
 
