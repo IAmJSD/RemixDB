@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	uuid "github.com/satori/go.uuid"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -167,11 +168,43 @@ func JoinCluster() {
 			panic("The other shard responded with a status " + string(req.StatusCode))
 		}
 	}
+	for _, x := range ShardInstance.ShardURLS {
+		u, err := url.Parse(x)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/ready/" + ShardInstance.Shards[ShardInstance.IAm]
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 204 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+	}
 	println("Reshard orchestration complete. Welcome to the cluster!")
 }
 
+// Marks a shard as ready.
+func MarkShardAsReady(ShardID string) {
+	ShardInstance.ActiveShards = append(ShardInstance.ActiveShards, ShardID)
+	err := Core.DeleteRecord("__internal", "sharding", "config")
+	if err != nil {
+		panic(err)
+	}
+	err = Core.Insert("__internal", "sharding", "config", ToInterfacePtr(ShardInstance))
+	if err != nil {
+		panic(err)
+	}
+}
+
 // Inserts into a remote shard.
-func InsertRemoteShard(ShardID string, Item interface{}, Key string) {
+func InsertRemoteShard(ShardID string, Item interface{}, Key string) *io.ReadCloser {
 	u, err := url.Parse(ShardInstance.ShardURLS[ShardID])
 	if err != nil {
 		panic(err)
@@ -190,6 +223,14 @@ func InsertRemoteShard(ShardID string, Item interface{}, Key string) {
 		panic(err)
 	}
 	client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+	req, err := HTTPClient.Do(client)
+	if err != nil {
+		panic(err)
+	}
+	if req.StatusCode > 399 && 500 > req.StatusCode {
+		return &req.Body
+	}
+	return nil
 }
 
 // Get the replica count.
@@ -260,6 +301,9 @@ func InsertShard(ShardID string, ShardURL string) {
 		panic(err)
 	}
 	err = Core.Insert("__internal", "sharding", "config", ToInterfacePtr(ShardInstance))
+	if err != nil {
+		panic(err)
+	}
 	Reshard()
 }
 
