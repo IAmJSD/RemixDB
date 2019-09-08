@@ -48,6 +48,8 @@ func main() {
 	println("Created a in-memory cache with a maximum usage of 100MB.")
 	NewDBCore()
 	println("Database initialised.")
+	ShardInit()
+	println("Sharding initialised.")
 
 	Time1()
 	Time2()
