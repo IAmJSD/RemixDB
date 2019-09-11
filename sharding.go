@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	uuid "github.com/satori/go.uuid"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
 )
 
 // Does the shard calculations including replicas.
@@ -32,7 +32,7 @@ func HandleShardCalculation(Key string, Shards []string, Replicas int) []string 
 	for x != Replicas {
 		ShardDiffLen := len(ShardDiff)
 		ShardID := int(KeyIntValue % int32(ShardDiffLen))
-		NewShardDiff := make([]string, ShardDiffLen - 1)
+		NewShardDiff := make([]string, ShardDiffLen-1)
 		CurrentIndex := 0
 		for i, v := range ShardDiff {
 			if i == ShardID {
@@ -52,20 +52,20 @@ func HandleShardCalculation(Key string, Shards []string, Replicas int) []string 
 
 // Defines the shard structure.
 type Shard struct {
-	Shards []string `json:"s"`
-	ActiveShards []string `json:"as"`
-	ShardURLS map[string]string `json:"su"`
-	IAm int `json:"iam"`
+	Shards        []string                   `json:"s"`
+	ActiveShards  []string                   `json:"as"`
+	ShardURLS     map[string]string          `json:"su"`
+	IAm           int                        `json:"iam"`
 	ReplicaConfig map[string]*map[string]int `json:"r"`
 }
 
 // Defines all used variables.
 var (
-	ShardInstance *Shard
+	ShardInstance     *Shard
 	InnerClusterToken = os.Getenv("INNER_CLUSTER_TOKEN")
-	OtherShardURL = os.Getenv("OTHER_SHARD_URL")
-	ThisShardURL = os.Getenv("THIS_SHARD_URL")
-	HTTPClient = http.Client{}
+	OtherShardURL     = os.Getenv("OTHER_SHARD_URL")
+	ThisShardURL      = os.Getenv("THIS_SHARD_URL")
+	HTTPClient        = http.Client{}
 )
 
 // Tries to get the latency of a shard.
@@ -148,7 +148,7 @@ func JoinCluster() {
 		}
 		u.Path = "/_shard/new"
 		ReqBody := map[string]interface{}{
-			"ShardID": UUID,
+			"ShardID":  UUID,
 			"ShardURL": ThisShardURL,
 		}
 		b, err := json.Marshal(&ReqBody)
@@ -204,7 +204,7 @@ func MarkShardAsReady(ShardID string) {
 }
 
 // Inserts into a remote shard.
-func InsertRemoteShard(ShardID string, Item interface{}, Key string) *io.ReadCloser {
+func InsertRemoteShardReshard(ShardID string, Item interface{}, Key string) {
 	u, err := url.Parse(ShardInstance.ShardURLS[ShardID])
 	if err != nil {
 		panic(err)
@@ -212,7 +212,7 @@ func InsertRemoteShard(ShardID string, Item interface{}, Key string) *io.ReadClo
 	u.Path = "/_shard/insert"
 	I := map[string]interface{}{
 		"data": Item,
-		"Key": Key,
+		"Key":  Key,
 	}
 	b, err := json.Marshal(&I)
 	if err != nil {
@@ -228,9 +228,11 @@ func InsertRemoteShard(ShardID string, Item interface{}, Key string) *io.ReadClo
 		panic(err)
 	}
 	if req.StatusCode > 399 && 500 > req.StatusCode {
-		return &req.Body
+		if req.StatusCode == 409 {
+			return
+		}
+		panic(req)
 	}
-	return nil
 }
 
 // Get the replica count.
@@ -278,7 +280,7 @@ func Reshard() {
 						if err != nil {
 							panic(err)
 						}
-						InsertRemoteShard(v, i, k)
+						InsertRemoteShardReshard(v, i, k)
 					}
 				}
 			}
@@ -322,10 +324,10 @@ func ShardInit() {
 		}
 		if InnerClusterToken == "" || OtherShardURL == "" {
 			err = Core.Insert("__internal", "sharding", "config", ToInterfacePtr(Shard{
-				Shards: []string{uuid.Must(uuid.NewV4()).String()},
-				ActiveShards: []string{uuid.Must(uuid.NewV4()).String()},
-				ShardURLS: map[string]string{},
-				IAm: 0,
+				Shards:        []string{uuid.Must(uuid.NewV4()).String()},
+				ActiveShards:  []string{uuid.Must(uuid.NewV4()).String()},
+				ShardURLS:     map[string]string{},
+				IAm:           0,
 				ReplicaConfig: map[string]*map[string]int{},
 			}))
 			if err != nil {
