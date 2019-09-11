@@ -117,7 +117,7 @@ func JoinCluster() {
 	if err != nil {
 		panic(err)
 	}
-	err = json.Unmarshal(Data, OtherShard)
+	err = json.Unmarshal(Data, &OtherShard)
 	if err != nil {
 		panic(err)
 	}
