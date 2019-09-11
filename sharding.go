@@ -317,6 +317,7 @@ func ShardInit() {
 			panic(err)
 		}
 	}
+
 	if Core.Table("__internal", "sharding") == nil {
 		err := Core.CreateTable("__internal", "sharding")
 		if err != nil {
@@ -337,6 +338,7 @@ func ShardInit() {
 			JoinCluster()
 		}
 	}
+
 	r, err := Core.Get("__internal", "sharding", "config")
 	if err != nil {
 		panic(err)
