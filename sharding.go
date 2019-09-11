@@ -227,7 +227,7 @@ func InsertRemoteShardReshard(ShardID string, Item interface{}, Key string) {
 	if err != nil {
 		panic(err)
 	}
-	if req.StatusCode > 399 && 500 > req.StatusCode {
+	if req.StatusCode > 399 && 600 > req.StatusCode {
 		if req.StatusCode == 409 {
 			return
 		}
