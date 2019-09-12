@@ -90,7 +90,6 @@ func GetShardLatency(ShardURL string) *int {
 
 // Joins this shard to a cluster.
 func JoinCluster() {
-	// TODO: Add tables/databases!
 	println("New config and cluster information detected. Attempting to join cluster!")
 	u, err := url.Parse(OtherShardURL)
 	if err != nil {
@@ -138,6 +137,47 @@ func JoinCluster() {
 	err = Core.Insert("__internal", "sharding", "config", ToInterfacePtr(ShardInstance))
 	if err != nil {
 		panic(err)
+	}
+
+	u.Path = "/_shard/dbs"
+	client, err = http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		panic(err)
+	}
+	client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+	req, err = HTTPClient.Do(client)
+	if err != nil {
+		panic(err)
+	}
+	if req.StatusCode != 200 {
+		panic("The other shard responded with a status " + string(req.StatusCode))
+	}
+	req, err = HTTPClient.Do(client)
+	if err != nil {
+		panic(err)
+	}
+	var Databases []*DBStructure
+	err = json.Unmarshal(Data, &Databases)
+	if err != nil {
+		panic(err)
+	}
+	for _, v := range Databases {
+		err := Core.CreateDatabase(v.Name)
+		if err != nil {
+			panic(err)
+		}
+		for _, t := range v.Tables {
+			err = Core.CreateTable(v.Name, t.Name)
+			if err != nil {
+				panic(err)
+			}
+			for _, i := range t.Indexes {
+				err = Core.CreateIndex(v.Name, t.Name, i.Name, i.Keys)
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
 	}
 
 	println("Orchestrating reshard - Do NOT close the database while this runs. Like seriously, do NOT close it, you WILL likely lose data or have integrity issues with it.")
