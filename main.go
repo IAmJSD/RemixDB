@@ -57,4 +57,5 @@ func main() {
 	Time4()
 	Time5()
 	Time6()
+	HTTPInit()
 }

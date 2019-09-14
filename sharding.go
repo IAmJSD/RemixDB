@@ -827,7 +827,7 @@ func (s *Shard) Insert(DatabaseName string, TableName string, Key string, Item *
 			"Item": Item,
 		}
 		b, err := json.Marshal(&POSTBody)
-		client, err := http.NewRequest("GET", u.String(), bytes.NewReader(b))
+		client, err := http.NewRequest("POST", u.String(), bytes.NewReader(b))
 		if err != nil {
 			panic(err)
 		}
