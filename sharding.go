@@ -66,6 +66,7 @@ var (
 	OtherShardURL     = os.Getenv("OTHER_SHARD_URL")
 	ThisShardURL      = os.Getenv("THIS_SHARD_URL")
 	HTTPClient        = http.Client{}
+	UptimeMap         = map[string]*int{}
 )
 
 // Tries to get the latency of a shard.
@@ -396,4 +397,65 @@ func ShardInit() {
 	}
 
 	ShardInstance = &s
+
+	for _, v := range ShardInstance.ShardURLS {
+		go ExecuteShardHeartbeat(v)
+	}
+}
+
+// Executes a shard heartbeat.
+func ExecuteShardHeartbeat(URL string) {
+	Heartbeat := GetShardLatency(URL)
+	if Heartbeat == nil {
+		println("[" + URL + "] Shard is down!")
+	}
+	UptimeMap[URL] = Heartbeat
+	time.Sleep(time.Second)
+	go ExecuteShardHeartbeat(URL)
+}
+
+// Defines the response from a remote shard.
+type RemoteShardGetResponse struct {
+	err  *string      `json:"error"`
+	data *interface{} `json:"data"`
+}
+
+// Gets a item from a table.
+func (s *Shard) Get(DatabaseName string, TableName string, Item string) (*interface{}, error) {
+	Replicas := GetReplicas(DatabaseName, TableName)
+	Shards := HandleShardCalculation(Item, s.Shards, Replicas)
+	for _, v := range Shards {
+		if s.ShardURLS[v] == "" {
+			// Me!
+			return Core.Get(DatabaseName, TableName, Item)
+		}
+	}
+	for _, v := range Shards {
+		// This is specifically for a remote shard. Let the remote shard respond.
+		u, err := url.Parse(s.ShardURLS[v])
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/get?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&item=" + url.QueryEscape(Item)
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 200 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+
+		var Response RemoteShardGetResponse
+		defer req.Body.Close()
+		var Data []byte
+		_, err = req.Body.Read(Data)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
