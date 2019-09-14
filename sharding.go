@@ -567,7 +567,7 @@ func (s *Shard) CreateIndex(DatabaseName string, TableName string, IndexName str
 		if err != nil {
 			panic(err)
 		}
-		u.Path = "/_shard/new_index?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&index=" + url.QueryEscape(IndexName) + "&keys=" + url.QueryEscape(string(b))
+		u.Path = "/_shard/new_index/" + url.QueryEscape(DatabaseName) + "/" + url.QueryEscape(TableName) + "/" + url.QueryEscape(IndexName) + "/" + url.QueryEscape(string(b))
 		client, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			panic(err)
@@ -602,7 +602,7 @@ func (s *Shard) CreateTable(DatabaseName string, TableName string) error {
 		if err != nil {
 			panic(err)
 		}
-		u.Path = "/_shard/new_table?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName)
+		u.Path = "/_shard/new_table/" + url.QueryEscape(DatabaseName) + "/" + url.QueryEscape(TableName)
 		client, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			panic(err)
@@ -637,7 +637,7 @@ func (s *Shard) DeleteDatabase(DatabaseName string) error {
 		if err != nil {
 			panic(err)
 		}
-		u.Path = "/_shard/delete_db?db=" + url.QueryEscape(DatabaseName)
+		u.Path = "/_shard/delete_db/" + url.QueryEscape(DatabaseName)
 		client, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			panic(err)
@@ -672,7 +672,7 @@ func (s *Shard) DeleteIndex(DatabaseName string, TableName string, IndexName str
 		if err != nil {
 			panic(err)
 		}
-		u.Path = "/_shard/delete_index?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&index=" + url.QueryEscape(IndexName)
+		u.Path = "/_shard/delete_index/" + url.QueryEscape(DatabaseName) + "/" + url.QueryEscape(TableName) + "/" + url.QueryEscape(IndexName)
 		client, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			panic(err)
@@ -698,7 +698,7 @@ func (s *Shard) DeleteRecord(DatabaseName string, TableName string, Item string)
 		}
 	}
 	UptimeMutex.RUnlock()
-	err := Core.DeleteRecord(DatabaseName, TableName, Item)
+	_, err := s.Get(DatabaseName, TableName, Item)
 	if err != nil {
 		return err
 	}
@@ -707,7 +707,7 @@ func (s *Shard) DeleteRecord(DatabaseName string, TableName string, Item string)
 		if err != nil {
 			panic(err)
 		}
-		u.Path = "/_shard/delete_record?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&index=" + url.QueryEscape(Item)
+		u.Path = "/_shard/delete_record/" + url.QueryEscape(DatabaseName) + "/" + url.QueryEscape(TableName) + "/" + url.QueryEscape(Item)
 		client, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			panic(err)
@@ -721,7 +721,7 @@ func (s *Shard) DeleteRecord(DatabaseName string, TableName string, Item string)
 			panic("The other shard responded with a status " + string(req.StatusCode))
 		}
 	}
-	return nil
+	return Core.DeleteRecord(DatabaseName, TableName, Item)
 }
 
 // Deletes a table from all shards.
@@ -742,7 +742,7 @@ func (s *Shard) DeleteTable(DatabaseName string, TableName string) error {
 		if err != nil {
 			panic(err)
 		}
-		u.Path = "/_shard/delete_table?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName)
+		u.Path = "/_shard/delete_table/" + url.QueryEscape(DatabaseName) + "/" + url.QueryEscape(TableName)
 		client, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			panic(err)
@@ -777,7 +777,7 @@ func (s *Shard) TableKeys(DatabaseName string, TableName string) (*[]string, err
 		if err != nil {
 			panic(err)
 		}
-		u.Path = "/_shard/table_keys?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName)
+		u.Path = "/_shard/table_keys/" + url.QueryEscape(DatabaseName) + "/" + url.QueryEscape(TableName)
 		client, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			panic(err)
