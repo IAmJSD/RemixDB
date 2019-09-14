@@ -12,34 +12,34 @@ func timeTrack(start time.Time, name string) {
 
 func Time1() {
 	defer timeTrack(time.Now(), "DBCreate")
-	Core.CreateDatabase("test")
+	ShardInstance.CreateDatabase("test")
 }
 
 func Time2() {
 	defer timeTrack(time.Now(), "TableCreate")
-	Core.CreateTable("test", "a")
+	ShardInstance.CreateTable("test", "a")
 }
 
 func Time3() {
 	defer timeTrack(time.Now(), "IndexCreate")
-	Core.CreateIndex("test", "a", "a", []string{"a"})
+	ShardInstance.CreateIndex("test", "a", "a", []string{"a"})
 }
 
 func Time4() {
 	defer timeTrack(time.Now(), "Insert")
-	Core.Insert("test", "a", "world", ToInterfacePtr(map[string]interface{}{
+	ShardInstance.Insert("test", "a", "world", ToInterfacePtr(map[string]interface{}{
 		"a": "b",
 	}))
 }
 
 func Time5() {
 	defer timeTrack(time.Now(), "UncachedGet")
-	Core.Get("test", "a", "world")
+	ShardInstance.Get("test", "a", "world")
 }
 
 func Time6() {
 	defer timeTrack(time.Now(), "CachedGet")
-	Core.Get("test", "a", "world")
+	ShardInstance.Get("test", "a", "world")
 }
 
 func main() {
