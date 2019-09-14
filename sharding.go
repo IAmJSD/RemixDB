@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -68,6 +69,7 @@ var (
 	ThisShardURL      = os.Getenv("THIS_SHARD_URL")
 	HTTPClient        = http.Client{}
 	UptimeMap         = map[string]*int{}
+	UptimeMutex 	  = sync.RWMutex{}
 )
 
 // Tries to get the latency of a shard.
@@ -410,7 +412,9 @@ func ExecuteShardHeartbeat(URL string) {
 	if Heartbeat == nil {
 		println("[" + URL + "] Shard is down!")
 	}
+	UptimeMutex.Lock()
 	UptimeMap[URL] = Heartbeat
+	UptimeMutex.Unlock()
 	time.Sleep(time.Second)
 	go ExecuteShardHeartbeat(URL)
 }
@@ -434,9 +438,15 @@ func (s *Shard) Get(DatabaseName string, TableName string, Item string) (*interf
 	var RemoteShard string
 	var Ping *int
 	for _, v := range Shards {
+		UptimeMutex.RLock()
 		if Ping == nil || (UptimeMap[v] != nil && *Ping > *UptimeMap[v]) {
 			RemoteShard = v
 		}
+		UptimeMutex.RUnlock()
+	}
+
+	if Ping == nil {
+		return nil, errors.New("All shards holding data are down!")
 	}
 
 	// This is specifically for a remote shard. Let the remote shard respond.
@@ -475,4 +485,377 @@ func (s *Shard) Get(DatabaseName string, TableName string, Item string) (*interf
 		panic(err)
 	}
 	return Response.Data, nil
+}
+
+// Gets the DB structure if it exists. We can get this from the local instance.
+func (s *Shard) Database(DatabaseName string) *DBStructure {
+	return Core.Database(DatabaseName)
+}
+
+// Gets the table structure if it exists. We can get this from the local instance.
+func (s *Shard) Table(DatabaseName string, TableName string) *Table {
+	return Core.Table(DatabaseName, TableName)
+}
+
+// Creates a database on all shards.
+func (s *Shard) CreateDatabase(DatabaseName string) error {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return errors.New("A shard is down. Please fix this before creating a database.")
+		}
+	}
+	UptimeMutex.RUnlock()
+	for _, v := range s.ShardURLS {
+		u, err := url.Parse(v)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/new_db?db=" + url.QueryEscape(DatabaseName)
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 204 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+	}
+	return Core.CreateDatabase(DatabaseName)
+}
+
+// Creates a index on all shards.
+func (s *Shard) CreateIndex(DatabaseName string, TableName string, IndexName string, Keys []string) error  {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return errors.New("A shard is down. Please fix this before creating a index.")
+		}
+	}
+	UptimeMutex.RUnlock()
+	err := Core.CreateIndex(DatabaseName, TableName, IndexName, Keys)
+	if err != nil {
+		return err
+	}
+	for _, v := range s.ShardURLS {
+		u, err := url.Parse(v)
+		if err != nil {
+			panic(err)
+		}
+		b, err := json.Marshal(&Keys)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/new_index?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&index=" + url.QueryEscape(IndexName) + "&keys=" + url.QueryEscape(string(b))
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 204 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+	}
+	return nil
+}
+
+// Creates a table on all shards.
+func (s *Shard) CreateTable(DatabaseName string, TableName string) error {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return errors.New("A shard is down. Please fix this before creating a table.")
+		}
+	}
+	UptimeMutex.RUnlock()
+	err := Core.CreateTable(DatabaseName, TableName)
+	if err != nil {
+		return err
+	}
+	for _, v := range s.ShardURLS {
+		u, err := url.Parse(v)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/new_table?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName)
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 204 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+	}
+	return nil
+}
+
+// Delete a database on all shards.
+func (s *Shard) DeleteDatabase(DatabaseName string) error {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return errors.New("A shard is down. Please fix this before deleting a database.")
+		}
+	}
+	UptimeMutex.RUnlock()
+	err := Core.DeleteDatabase(DatabaseName)
+	if err != nil {
+		return err
+	}
+	for _, v := range s.ShardURLS {
+		u, err := url.Parse(v)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/delete_db?db=" + url.QueryEscape(DatabaseName)
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 204 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+	}
+	return nil
+}
+
+// Delete a index on all shards.
+func (s *Shard) DeleteIndex(DatabaseName string, TableName string, IndexName string) error {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return errors.New("A shard is down. Please fix this before deleting a index.")
+		}
+	}
+	UptimeMutex.RUnlock()
+	err := Core.DeleteIndex(DatabaseName, TableName, IndexName)
+	if err != nil {
+		return err
+	}
+	for _, v := range s.ShardURLS {
+		u, err := url.Parse(v)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/delete_index?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&index=" + url.QueryEscape(IndexName)
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 204 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+	}
+	return nil
+}
+
+// Deletes a record from all shards.
+func (s *Shard) DeleteRecord(DatabaseName string, TableName string, Item string) error {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return errors.New("A shard is down. Please fix this before deleting a record.")
+		}
+	}
+	UptimeMutex.RUnlock()
+	err := Core.DeleteRecord(DatabaseName, TableName, Item)
+	if err != nil {
+		return err
+	}
+	for _, v := range s.ShardURLS {
+		u, err := url.Parse(v)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/delete_record?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&index=" + url.QueryEscape(Item)
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 204 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+	}
+	return nil
+}
+
+// Deletes a table from all shards.
+func (s *Shard) DeleteTable(DatabaseName string, TableName string) error {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return errors.New("A shard is down. Please fix this before deleting a table.")
+		}
+	}
+	UptimeMutex.RUnlock()
+	err := Core.DeleteTable(DatabaseName, TableName)
+	if err != nil {
+		return err
+	}
+	for _, v := range s.ShardURLS {
+		u, err := url.Parse(v)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/delete_table?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName)
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 204 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+	}
+	return nil
+}
+
+// Gets all table keys.
+func (s *Shard) TableKeys(DatabaseName string, TableName string) (*[]string, error) {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return nil, errors.New("A shard is down. Please fix this before getting table keys.")
+		}
+	}
+	UptimeMutex.RUnlock()
+	keys, err := Core.TableKeys(DatabaseName, TableName)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range s.ShardURLS {
+		u, err := url.Parse(v)
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/table_keys?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName)
+		client, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 200 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+		var Data []byte
+		_, err = req.Body.Read(Data)
+		if err != nil {
+			panic(err)
+		}
+		var StringArr []string
+		err = json.Unmarshal(Data, &StringArr)
+		if err != nil {
+			panic(err)
+		}
+		for _, v := range StringArr {
+			keys = append(keys, v)
+		}
+		err = req.Body.Close()
+		if err != nil {
+			panic(err)
+		}
+	}
+	return &keys, nil
+}
+
+// Insert into all shards. *click, nice*
+func (s *Shard) Insert(DatabaseName string, TableName string, Key string, Item *interface{}) error {
+	UptimeMutex.RLock()
+	for _, v := range UptimeMap {
+		if v == nil {
+			return errors.New("A shard is down. Please fix this before inserting.")
+		}
+	}
+	UptimeMutex.RUnlock()
+
+	Shards := HandleShardCalculation(Key, s.Shards, GetReplicas(DatabaseName, TableName))
+
+	for _, k := range Shards {
+		if s.ShardURLS[k] == "" {
+			err := Core.Insert(DatabaseName, TableName, Key, Item)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		u, err := url.Parse(s.ShardURLS[k])
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/_shard/insert"
+		POSTBody := map[string]interface{}{
+			"DB": DatabaseName,
+			"Table": TableName,
+			"Key": Key,
+			"Item": Item,
+		}
+		b, err := json.Marshal(&POSTBody)
+		client, err := http.NewRequest("GET", u.String(), bytes.NewReader(b))
+		if err != nil {
+			panic(err)
+		}
+		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+		req, err := HTTPClient.Do(client)
+		if err != nil {
+			panic(err)
+		}
+		if req.StatusCode != 200 {
+			panic("The other shard responded with a status " + string(req.StatusCode))
+		}
+		var Data []byte
+		_, err = req.Body.Read(Data)
+		if err != nil {
+			panic(err)
+		}
+		var InsertResponse *string
+		err = json.Unmarshal(Data, &InsertResponse)
+		if err != nil {
+			panic(err)
+		}
+		err = req.Body.Close()
+		if err != nil {
+			panic(err)
+		}
+		if InsertResponse != nil {
+			return errors.New(*InsertResponse)
+		}
+	}
+	return nil
 }
