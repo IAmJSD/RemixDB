@@ -92,6 +92,12 @@ func GetShardLatency(ShardURL string) *int {
 	return &ns
 }
 
+// Defines the new shard structure.
+type NewShardStructure struct {
+	ShardID string `json:"shard_id"`
+	ShardURL string `json:"shard_url"`
+}
+
 // Joins this shard to a cluster.
 func JoinCluster() {
 	println("New config and cluster information detected. Attempting to join cluster!")
@@ -191,9 +197,9 @@ func JoinCluster() {
 			panic(err)
 		}
 		u.Path = "/_shard/new"
-		ReqBody := map[string]interface{}{
-			"ShardID":  UUID,
-			"ShardURL": ThisShardURL,
+		ReqBody := NewShardStructure{
+			ShardID:  UUID,
+			ShardURL: ThisShardURL,
 		}
 		b, err := json.Marshal(&ReqBody)
 		if err != nil {
@@ -247,16 +253,26 @@ func MarkShardAsReady(ShardID string) {
 	}
 }
 
+// The remote insert structure.
+type RemoteInsertStructure struct {
+	DB string `json:"db"`
+	Table string `json:"table"`
+	Key string `json:"key"`
+	Item interface{} `json:"item"`
+}
+
 // Inserts into a remote shard.
-func InsertRemoteShardReshard(ShardID string, Item interface{}, Key string) {
+func InsertRemoteShardReshard(DatabaseName string, TableName string, ShardID string, Item interface{}, Key string) {
 	u, err := url.Parse(ShardInstance.ShardURLS[ShardID])
 	if err != nil {
 		panic(err)
 	}
 	u.Path = "/_shard/insert"
-	I := map[string]interface{}{
-		"data": Item,
-		"Key":  Key,
+	I := RemoteInsertStructure{
+		DB: DatabaseName,
+		Table: TableName,
+		Key: Key,
+		Item: Item,
 	}
 	b, err := json.Marshal(&I)
 	if err != nil {
@@ -272,9 +288,6 @@ func InsertRemoteShardReshard(ShardID string, Item interface{}, Key string) {
 		panic(err)
 	}
 	if req.StatusCode > 399 && 600 > req.StatusCode {
-		if req.StatusCode == 409 {
-			return
-		}
 		panic(req)
 	}
 }
@@ -302,15 +315,15 @@ func Reshard() {
 		Databases = append(Databases, v.Name)
 	}
 	Core.ArrayLock.Unlock()
-	for _, v := range Databases {
-		db := Core.Database(v)
-		for _, x := range db.Tables {
-			keys, err := Core.TableKeys(v, x.Name)
+	for _, d := range Databases {
+		db := Core.Database(d)
+		for _, t := range db.Tables {
+			keys, err := Core.TableKeys(d, t.Name)
 			if err != nil {
 				panic(err)
 			}
 			for _, k := range keys {
-				shards := HandleShardCalculation(k, ShardInstance.Shards, GetReplicas(v, x.Name))
+				shards := HandleShardCalculation(k, ShardInstance.Shards, GetReplicas(d, t.Name))
 				ContainsMe := false
 				for _, v := range shards {
 					if v == ShardInstance.Shards[ShardInstance.IAm] {
@@ -320,11 +333,11 @@ func Reshard() {
 				}
 				if !ContainsMe {
 					for _, v := range shards {
-						i, err := Core.Get(v, x.Name, k)
+						i, err := ShardInstance.Get(d, t.Name, k)
 						if err != nil {
 							panic(err)
 						}
-						InsertRemoteShardReshard(v, i, k)
+						InsertRemoteShardReshard(d, t.Name, v, i, k)
 					}
 				}
 			}
@@ -454,7 +467,7 @@ func (s *Shard) Get(DatabaseName string, TableName string, Item string) (*interf
 	if err != nil {
 		panic(err)
 	}
-	u.Path = "/_shard/get?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&item=" + url.QueryEscape(Item)
+	u.Path = "/_shard/get/" + url.QueryEscape(DatabaseName) + "/" + url.QueryEscape(TableName) + "/d" + url.QueryEscape(Item)
 	client, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		panic(err)
@@ -506,12 +519,16 @@ func (s *Shard) CreateDatabase(DatabaseName string) error {
 		}
 	}
 	UptimeMutex.RUnlock()
+	err := Core.CreateDatabase(DatabaseName)
+	if err != nil {
+		return err
+	}
 	for _, v := range s.ShardURLS {
 		u, err := url.Parse(v)
 		if err != nil {
 			panic(err)
 		}
-		u.Path = "/_shard/new_db?db=" + url.QueryEscape(DatabaseName)
+		u.Path = "/_shard/new_db/" + url.QueryEscape(DatabaseName)
 		client, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			panic(err)
@@ -525,7 +542,7 @@ func (s *Shard) CreateDatabase(DatabaseName string) error {
 			panic("The other shard responded with a status " + string(req.StatusCode))
 		}
 	}
-	return Core.CreateDatabase(DatabaseName)
+	return nil
 }
 
 // Creates a index on all shards.
@@ -820,11 +837,11 @@ func (s *Shard) Insert(DatabaseName string, TableName string, Key string, Item *
 			panic(err)
 		}
 		u.Path = "/_shard/insert"
-		POSTBody := map[string]interface{}{
-			"DB": DatabaseName,
-			"Table": TableName,
-			"Key": Key,
-			"Item": Item,
+		POSTBody := RemoteInsertStructure{
+			DB: DatabaseName,
+			Table: TableName,
+			Key: Key,
+			Item: Item,
 		}
 		b, err := json.Marshal(&POSTBody)
 		client, err := http.NewRequest("POST", u.String(), bytes.NewReader(b))
