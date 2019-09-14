@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -416,8 +417,8 @@ func ExecuteShardHeartbeat(URL string) {
 
 // Defines the response from a remote shard.
 type RemoteShardGetResponse struct {
-	err  *string      `json:"error"`
-	data *interface{} `json:"data"`
+	Err  *string      `json:"error"`
+	Data *interface{} `json:"data"`
 }
 
 // Gets a item from a table.
@@ -430,32 +431,48 @@ func (s *Shard) Get(DatabaseName string, TableName string, Item string) (*interf
 			return Core.Get(DatabaseName, TableName, Item)
 		}
 	}
+	var RemoteShard string
+	var Ping *int
 	for _, v := range Shards {
-		// This is specifically for a remote shard. Let the remote shard respond.
-		u, err := url.Parse(s.ShardURLS[v])
-		if err != nil {
-			panic(err)
-		}
-		u.Path = "/_shard/get?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&item=" + url.QueryEscape(Item)
-		client, err := http.NewRequest("GET", u.String(), nil)
-		if err != nil {
-			panic(err)
-		}
-		client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
-		req, err := HTTPClient.Do(client)
-		if err != nil {
-			panic(err)
-		}
-		if req.StatusCode != 200 {
-			panic("The other shard responded with a status " + string(req.StatusCode))
-		}
-
-		var Response RemoteShardGetResponse
-		defer req.Body.Close()
-		var Data []byte
-		_, err = req.Body.Read(Data)
-		if err != nil {
-			panic(err)
+		if Ping == nil || (UptimeMap[v] != nil && *Ping > *UptimeMap[v]) {
+			RemoteShard = v
 		}
 	}
+
+	// This is specifically for a remote shard. Let the remote shard respond.
+	u, err := url.Parse(RemoteShard)
+	if err != nil {
+		panic(err)
+	}
+	u.Path = "/_shard/get?db=" + url.QueryEscape(DatabaseName) + "&table=" + url.QueryEscape(TableName) + "&item=" + url.QueryEscape(Item)
+	client, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		panic(err)
+	}
+	client.Header.Set("Inner-Cluster-Token", InnerClusterToken)
+	req, err := HTTPClient.Do(client)
+	if err != nil {
+		panic(err)
+	}
+	if req.StatusCode != 200 {
+		panic("The other shard responded with a status " + string(req.StatusCode))
+	}
+	var Response RemoteShardGetResponse
+	var Data []byte
+	_, err = req.Body.Read(Data)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(Data, &Response)
+	if err != nil {
+		panic(err)
+	}
+	if Response.Err != nil {
+		return nil, errors.New(*Response.Err)
+	}
+	err = req.Body.Close()
+	if err != nil {
+		panic(err)
+	}
+	return Response.Data, nil
 }
