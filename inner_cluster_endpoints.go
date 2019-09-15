@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/buaazp/fasthttprouter"
 	"github.com/valyala/fasthttp"
-	"log"
 )
 
 // Returns a 204 (used for health checks).
@@ -189,12 +188,4 @@ func InnerClusterRoutesInit(router *fasthttprouter.Router) {
 	router.GET("/_shard/delete_record/:db/:table/:key", CheckClusterAuthorization(DeleteRecordHTTP))
 	router.GET("/_shard/delete_table/:db/:table", CheckClusterAuthorization(DeleteTableHTTP))
 	router.GET("/_shard/table_keys/:db/:table", CheckClusterAuthorization(TableKeysHTTP))
-}
-
-// Initialises the HTTP part of this database.
-func HTTPInit() {
-	router := fasthttprouter.New()
-	InnerClusterRoutesInit(router)
-	println("Serving on port 7010.")
-	log.Fatal(fasthttp.ListenAndServe(":7010", router.Handler))
 }
