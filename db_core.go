@@ -193,7 +193,7 @@ func (d *DBCore) CreateDatabase(DatabaseName string) error {
 	d.BaseFSLock.Lock()
 
 	// Creates all the needed folders.
-	DBFolder := path.Join(d.Base, "dbs", DatabaseName)
+	DBFolder := path.Join(d.Base, "dbs", B64FSEncode(DatabaseName))
 	err := os.Mkdir(DBFolder, 0777)
 	if err != nil {
 		panic(err)
@@ -238,7 +238,7 @@ func (d *DBCore) CreateTable(DatabaseName string, TableName string) error {
 			break
 		}
 	}
-	TableDir := path.Join(d.Base, "dbs", DatabaseName, TableName)
+	TableDir := path.Join(d.Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName))
 	err := os.Mkdir(TableDir, 0777)
 	if err != nil {
 		panic(err)
@@ -313,7 +313,7 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 	// Try and get the item from the filesystem.
 	lock := d.GetTableLock(DatabaseName, TableName)
 	lock.Lock()
-	ItemDir := path.Join(d.Base, "dbs", DatabaseName, TableName, "r", Item)
+	ItemDir := path.Join(d.Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "r", B64FSEncode(Item))
 	if _, err := os.Stat(ItemDir); os.IsNotExist(err) {
 		err := errors.New("The item specified does not exist.")
 		lock.Unlock()
@@ -355,7 +355,7 @@ func (d *DBCore) Insert(DatabaseName string, TableName string, Key string, Item 
 	lock.Lock()
 
 	// Inserts the item into the filesystem.
-	ItemDir := path.Join(d.Base, "dbs", DatabaseName, TableName, "r", Key)
+	ItemDir := path.Join(d.Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "r", B64FSEncode(Key))
 	f, err := os.Create(ItemDir)
 	if err != nil {
 		panic(err)
@@ -416,7 +416,7 @@ func (d *DBCore) DeleteRecord(DatabaseName string, TableName string, Item string
 	lock.Lock()
 
 	// Deletes the record.
-	e := os.Remove(path.Join(d.Base, "dbs", DatabaseName, TableName, "r", Item))
+	e := os.Remove(path.Join(d.Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "r", B64FSEncode(Item)))
 	if e != nil {
 		panic(e)
 	}
@@ -504,7 +504,7 @@ func (d *DBCore) DeleteIndex(DatabaseName string, TableName string, IndexName st
 	lock.Unlock()
 
 	// Do some filesystem garbage collection (this can be in the background).
-	err := os.RemoveAll(path.Join(d.Base, "dbs", DatabaseName, TableName, "i", IndexName))
+	err := os.RemoveAll(path.Join(d.Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "i", B64FSEncode(IndexName)))
 	if err != nil {
 		panic(err)
 	}
@@ -591,7 +591,7 @@ func (d *DBCore) DeleteTable(DatabaseName string, TableName string) error {
 					db.Tables = NewTableArray
 					d.ArrayLock.Unlock()
 					d.SaveStructure()
-					err := os.RemoveAll(path.Join(d.Base, "dbs", DatabaseName, TableName))
+					err := os.RemoveAll(path.Join(d.Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName)))
 					if err != nil {
 						panic(err)
 					}
@@ -629,7 +629,7 @@ func (d *DBCore) DeleteDatabase(DatabaseName string) error {
 			d.Structure = &NewDBArray
 			d.ArrayLock.Unlock()
 			d.SaveStructure()
-			err := os.RemoveAll(path.Join(d.Base, "dbs", DatabaseName))
+			err := os.RemoveAll(path.Join(d.Base, "dbs", B64FSEncode(DatabaseName)))
 			if err != nil {
 				panic(err)
 			}
@@ -649,16 +649,15 @@ func (d *DBCore) TableKeys(DatabaseName string, TableName string) ([]string, err
 		err := errors.New(`The table "` + TableName + `" does not exist.`)
 		return nil, err
 	}
-	files, err := ioutil.ReadDir(path.Join(d.Base, "dbs", DatabaseName, TableName, "r"))
+	files, err := ioutil.ReadDir(path.Join(d.Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "r"))
 	if err != nil {
 		panic(err)
 	}
 	FileArr := make([]string, len(files))
 	for i, v := range files {
-		FileArr[i] = v.Name()
+		FileArr[i] = B64FSDecode(v.Name())
 	}
 	return FileArr, nil
 }
 
 // TODO: GetAllByIndex
-// TODO: GetAll

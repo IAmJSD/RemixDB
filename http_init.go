@@ -10,6 +10,7 @@ import (
 func HTTPInit() {
 	router := fasthttprouter.New()
 	InnerClusterRoutesInit(router)
+	EndpointsInit(router)
 	println("Serving on port 7010.")
 	log.Fatal(fasthttp.ListenAndServe(":7010", router.Handler))
 }

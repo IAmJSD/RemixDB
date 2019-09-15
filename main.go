@@ -8,5 +8,15 @@ func main() {
 	println("Database initialised.")
 	ShardInit()
 	println("Sharding initialised.")
+	if ShardInstance.Database("remixdb") == nil {
+		err := ShardInstance.CreateDatabase("remixdb")
+		if err != nil {
+			panic(err)
+		}
+		err = ShardInstance.CreateTable("remixdb", "tokens")
+		if err != nil {
+			panic(err)
+		}
+	}
 	HTTPInit()
 }
