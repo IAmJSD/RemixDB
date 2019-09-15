@@ -143,5 +143,5 @@ func GETItemHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformati
 
 // Initialises all the HTTP endpoints.
 func EndpointsInit(router *fasthttprouter.Router) {
-	router.GET("/get/:db/:table/:item", TokenWrapper(GETItemHTTP))
+	router.GET("/v1/get/:db/:table/:item", TokenWrapper(GETItemHTTP))
 }
