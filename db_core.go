@@ -29,7 +29,7 @@ type DBCore struct {
 	Structure *[]*DBStructure
 	BaseFSLock *sync.Mutex
 	ArrayLock *sync.RWMutex
-	DBTableLockMap *map[string]*map[string]*sync.Mutex
+	DBTableLockMap *map[string]*map[string]*sync.RWMutex
 }
 
 // Creates the DB core.
@@ -59,7 +59,7 @@ func NewDBCore() {
 		Structure: &dbs,
 		BaseFSLock:  &BaseFSLock,
 		ArrayLock: &ArrayLock,
-		DBTableLockMap: &map[string]*map[string]*sync.Mutex{},
+		DBTableLockMap: &map[string]*map[string]*sync.RWMutex{},
 	}
 	if _, err := os.Stat(structure); os.IsNotExist(err) {
 		// Lets create the DB structure.
@@ -260,16 +260,16 @@ func (d *DBCore) CreateTable(DatabaseName string, TableName string) error {
 }
 
 // Gets the table lock and creates one if it does not exist.
-func (d *DBCore) GetTableLock(DatabaseName string, TableName string) *sync.Mutex {
+func (d *DBCore) GetTableLock(DatabaseName string, TableName string) *sync.RWMutex {
 	// Defines the lock.
 	DB := (*d.DBTableLockMap)[DatabaseName]
 	if DB == nil {
-		DB = &map[string]*sync.Mutex{}
+		DB = &map[string]*sync.RWMutex{}
 		(*d.DBTableLockMap)[DatabaseName] = DB
 	}
 	lock := (*DB)[TableName]
 	if lock == nil {
-		lock = &sync.Mutex{}
+		lock = &sync.RWMutex{}
 		(*DB)[TableName] = lock
 	}
 
@@ -303,11 +303,11 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 
 	// Try and get the item from the filesystem.
 	lock := d.GetTableLock(DatabaseName, TableName)
-	lock.Lock()
+	lock.RLock()
 	ItemDir := path.Join(d.Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "r", B64FSEncode(Item))
 	if _, err := os.Stat(ItemDir); os.IsNotExist(err) {
 		err := errors.New("The item specified does not exist.")
-		lock.Unlock()
+		lock.RUnlock()
 		return nil, err
 	}
 	data, err := ioutil.ReadFile(ItemDir)
@@ -319,7 +319,7 @@ func (d *DBCore) Get(DatabaseName string, TableName string, Item string) (*inter
 		panic(err)
 	}
 	Cache.Set(CacheKey, data)
-	lock.Unlock()
+	lock.RUnlock()
 
 	// Return the value.
 	return &item, nil
