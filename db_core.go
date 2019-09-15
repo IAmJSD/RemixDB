@@ -28,8 +28,7 @@ type DBCore struct {
 	Base string
 	Structure *[]*DBStructure
 	BaseFSLock *sync.Mutex
-	ArrayLock *sync.Mutex
-	TableLocksLock *sync.Mutex
+	ArrayLock *sync.RWMutex
 	DBTableLockMap *map[string]*map[string]*sync.Mutex
 }
 
@@ -54,14 +53,12 @@ func NewDBCore() {
 	dbs := make([]*DBStructure, 0)
 	structure := path.Join(join, "structure")
 	BaseFSLock := sync.Mutex{}
-	ArrayLock := sync.Mutex{}
-	TableLocksLock := sync.Mutex{}
+	ArrayLock := sync.RWMutex{}
 	Core = &DBCore{
 		Base:  join,
 		Structure: &dbs,
 		BaseFSLock:  &BaseFSLock,
 		ArrayLock: &ArrayLock,
-		TableLocksLock: &TableLocksLock,
 		DBTableLockMap: &map[string]*map[string]*sync.Mutex{},
 	}
 	if _, err := os.Stat(structure); os.IsNotExist(err) {
@@ -90,7 +87,7 @@ func NewDBCore() {
 // Get a copy of the DB structure if it exists.
 func (d *DBCore) Database(Database string) *DBStructure {
 	// Locks the array lock.
-	d.ArrayLock.Lock()
+	d.ArrayLock.RLock()
 
 	// Defines the DB structure.
 	var db DBStructure
@@ -108,7 +105,7 @@ func (d *DBCore) Database(Database string) *DBStructure {
 	}
 
 	// Unlocks the array lock.
-	d.ArrayLock.Unlock()
+	d.ArrayLock.RUnlock()
 
 	// Creates a pointer if found.
 	var ptr *DBStructure
@@ -264,9 +261,6 @@ func (d *DBCore) CreateTable(DatabaseName string, TableName string) error {
 
 // Gets the table lock and creates one if it does not exist.
 func (d *DBCore) GetTableLock(DatabaseName string, TableName string) *sync.Mutex {
-	// Locks the table locks lock.
-	d.TableLocksLock.Lock()
-
 	// Defines the lock.
 	DB := (*d.DBTableLockMap)[DatabaseName]
 	if DB == nil {
@@ -278,9 +272,6 @@ func (d *DBCore) GetTableLock(DatabaseName string, TableName string) *sync.Mutex
 		lock = &sync.Mutex{}
 		(*DB)[TableName] = lock
 	}
-
-	// Unlocks the table locks lock.
-	d.TableLocksLock.Unlock()
 
 	// Returns the lock.
 	return lock

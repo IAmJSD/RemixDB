@@ -12,7 +12,7 @@ import (
 type Index struct {
 	Name string `json:"n"`
 	Keys []string `json:"k"`
-	IndexLock *sync.Mutex `json:"-"`
+	IndexLock *sync.RWMutex `json:"-"`
 	MapPreload *map[string]*[]string `json:"-"`
 	CurrentIndexDoc int `json:"-"`
 }
@@ -20,7 +20,7 @@ type Index struct {
 // Initialises the index.
 func (i *Index) Init(Base string, DatabaseName string, TableName string) {
 	if i.IndexLock == nil {
-		i.IndexLock = &sync.Mutex{}
+		i.IndexLock = &sync.RWMutex{}
 	}
 	if i.MapPreload == nil {
 		i.IndexLock.Lock()
