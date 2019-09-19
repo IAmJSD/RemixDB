@@ -2,24 +2,25 @@ package main
 
 import (
 	"encoding/json"
+
 	"github.com/buaazp/fasthttprouter"
 	"github.com/valyala/fasthttp"
 )
 
 // All access control information.
 type AccessControlInformation struct {
-	Admin bool `json:"admin"`
-	Create bool `json:"create"`
-	Read bool `json:"read"`
-	Write bool `json:"write"`
-	DBOverrides *map[string]*AccessControlInformation `json:"db_overrides"`
+	Admin          bool                                              `json:"admin"`
+	Create         bool                                              `json:"create"`
+	Read           bool                                              `json:"read"`
+	Write          bool                                              `json:"write"`
+	DBOverrides    *map[string]*AccessControlInformation             `json:"db_overrides"`
 	TableOverrides *map[string]*map[string]*AccessControlInformation `json:"table_overrides"`
 }
 
 // The generic response.
 type GenericResponse struct {
-	Error *string `json:"error"`
-	Data *interface{} `json:"data"`
+	Error *string      `json:"error"`
+	Data  *interface{} `json:"data"`
 }
 
 // Checks the alleged token. The struct containing token access control information will be returned.
@@ -141,7 +142,32 @@ func GETItemHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformati
 	}, ctx)
 }
 
+// Gets the database information.
+func GETDatabaseHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Read
+	DB := ctx.UserValue("db").(string)
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Read
+		}
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	ctx.Response.SetStatusCode(200)
+	DBData := ShardInstance.Database(DB)
+	SendJSONResponse(GenericResponse{
+		Error: nil,
+		Data:  ToInterfacePtr(DBData),
+	}, ctx)
+}
+
 // Initialises all the HTTP endpoints.
 func EndpointsInit(router *fasthttprouter.Router) {
 	router.GET("/v1/get/:db/:table/:item", TokenWrapper(GETItemHTTP))
+	router.GET("/v1/database/:db", TokenWrapper(GETDatabaseHTTP))
 }
