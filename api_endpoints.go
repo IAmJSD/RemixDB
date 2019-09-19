@@ -182,6 +182,22 @@ func PUTTableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformat
 		return
 	}
 
+	if DB == "remixdb" && !AccessControl.Admin {
+		// Nope! This requires admin.
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
 	Table := ctx.UserValue("table").(string)
 
 	err := ShardInstance.CreateTable(DB, Table)
@@ -211,6 +227,23 @@ func PUTDatabaseHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInfor
 	}
 
 	DB := ctx.UserValue("db").(string)
+
+	if DB == "remixdb" && !AccessControl.Admin {
+		// Nope! This requires admin.
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
 	err := ShardInstance.CreateDatabase(DB)
 	if err == nil {
 		ctx.Response.SetStatusCode(200)
@@ -249,6 +282,22 @@ func GETTableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformat
 		}
 	}
 
+	if DB == "remixdb" && !AccessControl.Admin {
+		// Nope! This requires admin.
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
 	if !Perm {
 		SendUnauthorized(ctx)
 		return
@@ -262,11 +311,185 @@ func GETTableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformat
 	}, ctx)
 }
 
+// Deletes a database.
+func DELETEDatabaseHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Admin
+	DB := ctx.UserValue("db").(string)
+
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Admin
+		}
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "remixdb" && !AccessControl.Admin {
+		// Nope! This requires admin.
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	err := ShardInstance.DeleteDatabase(DB)
+	if err == nil {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(400)
+		e := err.Error()
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	}
+}
+
+// Deletes a table.
+func DELETETableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Admin
+	DB := ctx.UserValue("db").(string)
+	Table := ctx.UserValue("table").(string)
+
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Admin
+		}
+	}
+	if AccessControl.TableOverrides != nil {
+		DBTableOverride := (*AccessControl.TableOverrides)[DB]
+		if DBTableOverride != nil {
+			TableOverride := (*DBTableOverride)[Table]
+			if TableOverride != nil {
+				Perm = TableOverride.Admin
+			}
+		}
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "remixdb" && !AccessControl.Admin {
+		// Nope! This requires admin.
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	err := ShardInstance.DeleteTable(DB, Table)
+	if err == nil {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(400)
+		e := err.Error()
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	}
+}
+
+// Deletes the item.
+func DELETEItemHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Write
+	DB := ctx.UserValue("db").(string)
+	Table := ctx.UserValue("table").(string)
+	Item := ctx.UserValue("item").(string)
+
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Write
+		}
+	}
+	if AccessControl.TableOverrides != nil {
+		DBTableOverride := (*AccessControl.TableOverrides)[DB]
+		if DBTableOverride != nil {
+			TableOverride := (*DBTableOverride)[Table]
+			if TableOverride != nil {
+				Perm = TableOverride.Write
+			}
+		}
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "remixdb" && !AccessControl.Admin {
+		// Nope! This requires admin.
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	err := ShardInstance.DeleteRecord(DB, Table, Item)
+	if err == nil {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(400)
+		e := err.Error()
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	}
+}
+
 // Initialises all the HTTP endpoints.
 func EndpointsInit(router *fasthttprouter.Router) {
-	router.GET("/v1/get/:db/:table/:item", TokenWrapper(GETItemHTTP))
+	router.GET("/v1/record/:db/:table/:item", TokenWrapper(GETItemHTTP))
+	router.DELETE("/v1/record/:db/:table/:item", TokenWrapper(DELETEItemHTTP))
 	router.GET("/v1/database/:db", TokenWrapper(GETDatabaseHTTP))
 	router.PUT("/v1/database/:db", TokenWrapper(PUTDatabaseHTTP))
+	router.DELETE("/v1/database/:db", TokenWrapper(DELETEDatabaseHTTP))
 	router.GET("/v1/table/:db/:table", TokenWrapper(GETTableHTTP))
 	router.PUT("/v1/table/:db/:table", TokenWrapper(PUTTableHTTP))
+	router.DELETE("/v1/table/:db/:table", TokenWrapper(DELETETableHTTP))
 }
