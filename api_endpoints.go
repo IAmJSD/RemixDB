@@ -166,6 +166,68 @@ func GETDatabaseHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInfor
 	}, ctx)
 }
 
+// Inserts the database.
+func PUTTableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Write
+	DB := ctx.UserValue("db").(string)
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Write
+		}
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	Table := ctx.UserValue("table").(string)
+
+	err := ShardInstance.CreateTable(DB, Table)
+	if err == nil {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(400)
+		e := err.Error()
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	}
+}
+
+// Inserts the table.
+func PUTDatabaseHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Write
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	DB := ctx.UserValue("db").(string)
+	err := ShardInstance.CreateDatabase(DB)
+	if err == nil {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(400)
+		e := err.Error()
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	}
+}
+
 // Gets the table information.
 func GETTableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
 	Perm := AccessControl.Read
@@ -204,5 +266,7 @@ func GETTableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformat
 func EndpointsInit(router *fasthttprouter.Router) {
 	router.GET("/v1/get/:db/:table/:item", TokenWrapper(GETItemHTTP))
 	router.GET("/v1/database/:db", TokenWrapper(GETDatabaseHTTP))
+	router.PUT("/v1/database/:db", TokenWrapper(PUTDatabaseHTTP))
 	router.GET("/v1/table/:db/:table", TokenWrapper(GETTableHTTP))
+	router.PUT("/v1/table/:db/:table", TokenWrapper(PUTTableHTTP))
 }
