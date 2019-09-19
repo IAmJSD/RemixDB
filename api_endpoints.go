@@ -166,8 +166,43 @@ func GETDatabaseHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInfor
 	}, ctx)
 }
 
+// Gets the table information.
+func GETTableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Read
+	DB := ctx.UserValue("db").(string)
+	Table := ctx.UserValue("table").(string)
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Read
+		}
+	}
+	if AccessControl.TableOverrides != nil {
+		DBTableOverride := (*AccessControl.TableOverrides)[DB]
+		if DBTableOverride != nil {
+			TableOverride := (*DBTableOverride)[Table]
+			if TableOverride != nil {
+				Perm = TableOverride.Read
+			}
+		}
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	ctx.Response.SetStatusCode(200)
+	DBData := ShardInstance.Table(DB, Table)
+	SendJSONResponse(GenericResponse{
+		Error: nil,
+		Data:  ToInterfacePtr(DBData),
+	}, ctx)
+}
+
 // Initialises all the HTTP endpoints.
 func EndpointsInit(router *fasthttprouter.Router) {
 	router.GET("/v1/get/:db/:table/:item", TokenWrapper(GETItemHTTP))
 	router.GET("/v1/database/:db", TokenWrapper(GETDatabaseHTTP))
+	router.GET("/v1/table/:db/:table", TokenWrapper(GETTableHTTP))
 }
