@@ -583,18 +583,20 @@ func POSTItemHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformat
 		return
 	}
 
-	var Response {}interface
-	var Data []byte
-	_, err := req.Body.Read(Data)
+	var Response interface{}
+	Data := ctx.Request.Body()
+	err := json.Unmarshal(Data, &Response)
 	if err != nil {
-		panic(err)
-	}
-	err = json.Unmarshal(Data, &Response)
-	if err != nil {
-		panic(err)
+		e := "The JSON given is invalid."
+		ctx.Response.SetStatusCode(400)
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
 	}
 
-	err := ShardInstance.Insert(DB, Table, ctx.UserValue("item").(string), &Response)
+	err = ShardInstance.Insert(DB, Table, ctx.UserValue("item").(string), &Response)
 	if err != nil {
 		e := err.Error()
 		ctx.Response.SetStatusCode(400)
@@ -623,4 +625,6 @@ func EndpointsInit(router *fasthttprouter.Router) {
 	router.GET("/v1/table/:db/:table/keys", TokenWrapper(GETTableKeysHTTP))
 	router.PUT("/v1/table/:db/:table", TokenWrapper(PUTTableHTTP))
 	router.DELETE("/v1/table/:db/:table", TokenWrapper(DELETETableHTTP))
+	// TODO: Allow listing databases.
+	// TODO: Index creation/deletion/fetching.
 }
