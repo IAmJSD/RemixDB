@@ -311,6 +311,65 @@ func GETTableHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformat
 	}, ctx)
 }
 
+// Gets the table keys.
+func GETTableKeysHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Read
+	DB := ctx.UserValue("db").(string)
+	Table := ctx.UserValue("table").(string)
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Read
+		}
+	}
+	if AccessControl.TableOverrides != nil {
+		DBTableOverride := (*AccessControl.TableOverrides)[DB]
+		if DBTableOverride != nil {
+			TableOverride := (*DBTableOverride)[Table]
+			if TableOverride != nil {
+				Perm = TableOverride.Read
+			}
+		}
+	}
+
+	if DB == "remixdb" && !AccessControl.Admin {
+		// Nope! This requires admin.
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	DBData, err := ShardInstance.TableKeys(DB, Table)
+	if err != nil {
+		e := err.Error()
+		ctx.Response.SetStatusCode(400)
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  ToInterfacePtr(DBData),
+		}, ctx)
+	}
+}
+
 // Deletes a database.
 func DELETEDatabaseHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
 	Perm := AccessControl.Admin
@@ -482,14 +541,86 @@ func DELETEItemHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInform
 	}
 }
 
+// Allows a user to insert a item into the DB.
+func POSTItemHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Write
+	DB := ctx.UserValue("db").(string)
+	Table := ctx.UserValue("table").(string)
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Write
+		}
+	}
+	if AccessControl.TableOverrides != nil {
+		DBTableOverride := (*AccessControl.TableOverrides)[DB]
+		if DBTableOverride != nil {
+			TableOverride := (*DBTableOverride)[Table]
+			if TableOverride != nil {
+				Perm = TableOverride.Write
+			}
+		}
+	}
+
+	if DB == "remixdb" && !AccessControl.Admin {
+		// Nope! This requires admin.
+		SendUnauthorized(ctx)
+		return
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	var Response {}interface
+	var Data []byte
+	_, err := req.Body.Read(Data)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(Data, &Response)
+	if err != nil {
+		panic(err)
+	}
+
+	err := ShardInstance.Insert(DB, Table, ctx.UserValue("item").(string), &Response)
+	if err != nil {
+		e := err.Error()
+		ctx.Response.SetStatusCode(400)
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  nil,
+		}, ctx)
+	}
+}
+
 // Initialises all the HTTP endpoints.
 func EndpointsInit(router *fasthttprouter.Router) {
 	router.GET("/v1/record/:db/:table/:item", TokenWrapper(GETItemHTTP))
+	router.POST("/v1/record/:db/:table/:item", TokenWrapper(POSTItemHTTP))
 	router.DELETE("/v1/record/:db/:table/:item", TokenWrapper(DELETEItemHTTP))
 	router.GET("/v1/database/:db", TokenWrapper(GETDatabaseHTTP))
 	router.PUT("/v1/database/:db", TokenWrapper(PUTDatabaseHTTP))
 	router.DELETE("/v1/database/:db", TokenWrapper(DELETEDatabaseHTTP))
 	router.GET("/v1/table/:db/:table", TokenWrapper(GETTableHTTP))
+	router.GET("/v1/table/:db/:table/keys", TokenWrapper(GETTableKeysHTTP))
 	router.PUT("/v1/table/:db/:table", TokenWrapper(PUTTableHTTP))
 	router.DELETE("/v1/table/:db/:table", TokenWrapper(DELETETableHTTP))
 }
