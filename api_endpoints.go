@@ -613,6 +613,50 @@ func POSTItemHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformat
 	}
 }
 
+// Lists all the databases.
+func GETDatabasesHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	// We will get all the databases first to reduce the lock length.
+	Core.ArrayLock.RLock()
+	Databases := make([]string, len(*Core.Structure))
+	for i, v := range *Core.Structure {
+		Databases[i] = v.Name
+	}
+	Core.ArrayLock.RUnlock()
+
+	// Remove any which the user shouldn't be able to see (no read permissions).
+	DatabasesClone := Databases
+	for _, v := range DatabasesClone {
+		Perm := AccessControl.Read
+		if AccessControl.DBOverrides != nil {
+			DBOverride := (*AccessControl.DBOverrides)[v]
+			if DBOverride != nil {
+				Perm = DBOverride.Read
+			}
+		}
+		if v == "__internal" {
+			// No!
+			Databases = Databases[1:]
+			continue
+		}
+		if v == "remixdb" && !AccessControl.Admin {
+			// This DB needs admin.
+			Databases = Databases[1:]
+			continue
+		}
+		if !Perm {
+			// We should remove this one.
+			Databases = Databases[1:]
+			continue
+		}
+	}
+
+	ctx.Response.SetStatusCode(200)
+	SendJSONResponse(GenericResponse{
+		Error: nil,
+		Data:  ToInterfacePtr(Databases),
+	}, ctx)
+}
+
 // Initialises all the HTTP endpoints.
 func EndpointsInit(router *fasthttprouter.Router) {
 	router.GET("/v1/record/:db/:table/:item", TokenWrapper(GETItemHTTP))
@@ -625,6 +669,6 @@ func EndpointsInit(router *fasthttprouter.Router) {
 	router.GET("/v1/table/:db/:table/keys", TokenWrapper(GETTableKeysHTTP))
 	router.PUT("/v1/table/:db/:table", TokenWrapper(PUTTableHTTP))
 	router.DELETE("/v1/table/:db/:table", TokenWrapper(DELETETableHTTP))
-	// TODO: Allow listing databases.
+	router.GET("/v1/databases", TokenWrapper(GETDatabasesHTTP))
 	// TODO: Index creation/deletion/fetching.
 }
