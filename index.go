@@ -192,3 +192,42 @@ func (i *Index) DeleteItem(Base string, DatabaseName string, TableName string, I
 	// Unlocks the index lock.
 	i.IndexLock.Unlock()
 }
+
+
+// Gets a index.
+func (i *Index) Get(Base string, DatabaseName string, TableName string, Key string) *[]string {
+	IndexFile := "0"
+	var IndexFilePath string
+	var MapSave *map[string]*[]string
+	i.IndexLock.RLock()
+
+	if len(*i.MapPreload) == 50000 {
+		// Load the last part of the index from disk. If it's also the length of 50,000, make a new index file.
+		var DiskLoad map[string]*[]string
+		IndexFile = string(i.CurrentIndexDoc - 1)
+		IndexFilePath = path.Join(Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "i", B64FSEncode(i.Name), B64FSEncode(IndexFile))
+		f, err := ioutil.ReadFile(IndexFilePath)
+		if err != nil {
+			panic(err)
+		}
+		err = json.Unmarshal(f, &DiskLoad)
+		if err != nil {
+			panic(err)
+		}
+		if len(DiskLoad) == 50000 {
+			MapSave = &map[string]*[]string{}
+			IndexFile = string(i.CurrentIndexDoc)
+			i.CurrentIndexDoc++
+		} else {
+			MapSave = &DiskLoad
+		}
+	} else {
+		// This is in memory! Grab the preload.
+		MapSave = i.MapPreload
+		IndexFilePath = path.Join(Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "i", B64FSEncode(i.Name), B64FSEncode(IndexFile))
+	}
+	i.IndexLock.RUnlock()
+
+	IndexRes := (*MapSave)[Key]
+	return IndexRes
+}
