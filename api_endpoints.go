@@ -657,6 +657,169 @@ func GETDatabasesHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInfo
 	}, ctx)
 }
 
+// Deletes a index.
+func DELETEIndexHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Admin
+	DB := ctx.UserValue("db").(string)
+	Table := ctx.UserValue("table").(string)
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Admin
+		}
+	}
+	if AccessControl.TableOverrides != nil {
+		DBTableOverride := (*AccessControl.TableOverrides)[DB]
+		if DBTableOverride != nil {
+			TableOverride := (*DBTableOverride)[Table]
+			if TableOverride != nil {
+				Perm = TableOverride.Admin
+			}
+		}
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	err := ShardInstance.DeleteIndex(DB, Table, ctx.UserValue("index").(string))
+	if err == nil {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(400)
+		e := err.Error()
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	}
+}
+
+// Gets the index.
+func PUTIndexHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Admin
+	DB := ctx.UserValue("db").(string)
+	Table := ctx.UserValue("table").(string)
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Admin
+		}
+	}
+	if AccessControl.TableOverrides != nil {
+		DBTableOverride := (*AccessControl.TableOverrides)[DB]
+		if DBTableOverride != nil {
+			TableOverride := (*DBTableOverride)[Table]
+			if TableOverride != nil {
+				Perm = TableOverride.Admin
+			}
+		}
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	var Response []string
+	Data := ctx.Request.Body()
+	err := json.Unmarshal(Data, &Response)
+	if err != nil {
+		e := "The JSON given is invalid."
+		ctx.Response.SetStatusCode(400)
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	err = ShardInstance.CreateIndex(DB, Table, ctx.UserValue("index").(string), Response)
+	if err == nil {
+		ctx.Response.SetStatusCode(200)
+		SendJSONResponse(GenericResponse{
+			Error: nil,
+			Data:  nil,
+		}, ctx)
+	} else {
+		ctx.Response.SetStatusCode(400)
+		e := err.Error()
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+	}
+}
+
+// Gets the index.
+func GETIndexHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformation) {
+	Perm := AccessControl.Read
+	DB := ctx.UserValue("db").(string)
+	Table := ctx.UserValue("table").(string)
+	if AccessControl.DBOverrides != nil {
+		DBOverride := (*AccessControl.DBOverrides)[DB]
+		if DBOverride != nil {
+			Perm = DBOverride.Read
+		}
+	}
+	if AccessControl.TableOverrides != nil {
+		DBTableOverride := (*AccessControl.TableOverrides)[DB]
+		if DBTableOverride != nil {
+			TableOverride := (*DBTableOverride)[Table]
+			if TableOverride != nil {
+				Perm = TableOverride.Read
+			}
+		}
+	}
+
+	if DB == "__internal" {
+		// Here be dragons!
+		e := "This is an internal database used by RemixDB on a per-shard basis. Here be dragons!"
+		SendJSONResponse(GenericResponse{
+			Error: &e,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
+	if !Perm {
+		SendUnauthorized(ctx)
+		return
+	}
+
+	// TODO: Finish this.
+	ctx.Response.SetStatusCode(200)
+	SendJSONResponse(GenericResponse{
+		Error: nil,
+		Data:  ToInterfacePtr(make([]string, 0)),
+	}, ctx)
+}
+
 // Initialises all the HTTP endpoints.
 func EndpointsInit(router *fasthttprouter.Router) {
 	router.GET("/v1/record/:db/:table/:item", TokenWrapper(GETItemHTTP))
@@ -670,5 +833,7 @@ func EndpointsInit(router *fasthttprouter.Router) {
 	router.PUT("/v1/table/:db/:table", TokenWrapper(PUTTableHTTP))
 	router.DELETE("/v1/table/:db/:table", TokenWrapper(DELETETableHTTP))
 	router.GET("/v1/databases", TokenWrapper(GETDatabasesHTTP))
-	// TODO: Index creation/deletion/fetching.
+	router.DELETE("/v1/index/:db/:table/:index", TokenWrapper(DELETEIndexHTTP))
+	router.GET("/v1/index/:db/:table/:index", TokenWrapper(GETIndexHTTP))
+	router.PUT("/v1/index/:db/:table/:index", TokenWrapper(PUTIndexHTTP))
 }

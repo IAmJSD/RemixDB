@@ -25,7 +25,7 @@ func (i *Index) Init(Base string, DatabaseName string, TableName string) {
 	if i.MapPreload == nil {
 		i.IndexLock.Lock()
 		i.MapPreload = &map[string]*[]string{}
-		IndexDir := path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name)
+		IndexDir := path.Join(Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "i", B64FSEncode(i.Name))
 		if _, err := os.Stat(IndexDir); os.IsNotExist(err) {
 			err = os.Mkdir(IndexDir, 0777)
 			if err != nil {
@@ -59,7 +59,7 @@ func (i *Index) Insert(Base string, DatabaseName string, TableName string, Key s
 		// Load the last part of the index from disk. If it's also the length of 50,000, make a new index file.
 		var DiskLoad map[string]*[]string
 		IndexFile = string(i.CurrentIndexDoc - 1)
-		IndexFilePath = path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, IndexFile)
+		IndexFilePath = path.Join(Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "i", B64FSEncode(i.Name), B64FSEncode(IndexFile))
 		f, err := ioutil.ReadFile(IndexFilePath)
 		if err != nil {
 			panic(err)
@@ -78,7 +78,7 @@ func (i *Index) Insert(Base string, DatabaseName string, TableName string, Key s
 	} else {
 		// This is in memory! Grab the preload.
 		MapSave = i.MapPreload
-		IndexFilePath = path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, IndexFile)
+		IndexFilePath = path.Join(Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "i", B64FSEncode(i.Name), B64FSEncode(IndexFile))
 	}
 
 	if (*MapSave)[Key] == nil {
@@ -121,7 +121,7 @@ func (i *Index) DeleteItem(Base string, DatabaseName string, TableName string, I
 					z++
 				}
 				(*i.MapPreload)[k] = &Data
-				IndexFilePath := path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, "0")
+				IndexFilePath := path.Join(Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "i", B64FSEncode(i.Name), B64FSEncode("0"))
 				f, err := os.Create(IndexFilePath)
 				if err != nil {
 					panic(err)
@@ -144,7 +144,7 @@ func (i *Index) DeleteItem(Base string, DatabaseName string, TableName string, I
 	if i.CurrentIndexDoc > 1 {
 		x := 1
 		for i.CurrentIndexDoc != x {
-			IndexFilePath := path.Join(Base, "dbs", DatabaseName, TableName, "i", i.Name, string(x))
+			IndexFilePath := path.Join(Base, "dbs", B64FSEncode(DatabaseName), B64FSEncode(TableName), "i", B64FSEncode(i.Name), B64FSEncode(string(x)))
 			var Loaded map[string]*[]string
 			d, err := ioutil.ReadFile(IndexFilePath)
 			if err != nil {
