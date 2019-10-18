@@ -812,11 +812,19 @@ func GETIndexHTTP(ctx *fasthttp.RequestCtx, AccessControl *AccessControlInformat
 		return
 	}
 
-	// TODO: Finish this.
+	index, err := ShardInstance.GetIndex(DB, Table)
+	if err != nil {
+		SendJSONResponse(GenericResponse{
+			Error: &err,
+			Data:  nil,
+		}, ctx)
+		return
+	}
+
 	ctx.Response.SetStatusCode(200)
 	SendJSONResponse(GenericResponse{
 		Error: nil,
-		Data:  ToInterfacePtr(make([]string, 0)),
+		Data:  &index,
 	}, ctx)
 }
 
